@@ -36,7 +36,8 @@ Update your MySQL username, password, and database name.
 Import the db.sql file into your MySQL server.
 
 5. **Run the server**
-node server.js
+   ```bash
+   node server.js
 
 6. **Open the app**
 Open index.html in your browser and start chatting 
