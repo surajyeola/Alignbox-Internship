@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fun Friday Group — Chat</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;background:#111;background-image:none;display:flex;align-items:center;justify-content:center;height:100vh}
+.frame{width:420px;height:820px;background:#fff;border-radius:4px;box-shadow:0 10px 40px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column}
+
+/* Header */
+.header{height:72px;padding:12px 18px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px}
+.back{font-size:22px;color:#333}
+.title{font-weight:700;color:#a42b1f;font-size:20px}
+.anon-toggle{margin-left:auto;display:flex;align-items:center;gap:8px;color:#666}
+
+/* Message */
+.messages-wrap{flex:1;padding:18px 18px;overflow:auto;background:linear-gradient(to bottom,#fff,#fafafa)}
+.message{display:flex;gap:12px;margin-bottom:16px;align-items:flex-end}
+.avatar{width:44px;height:44px;border-radius:50%;background:#ddd;flex:0 0 44px}
+.bubble{max-width:70%;padding:10px 14px;border-radius:10px;background:#f1f3f5;color:#111;font-weight:600;box-shadow:0 1px 0 rgba(0,0,0,0.03)}
+.bubble.me{background:#8c2d1d;color:#fff;border-bottom-right-radius:2px;margin-left:auto}
+.meta{font-size:12px;color:#999;margin-top:6px}
+
+
+/* input area */
+.input-area{padding:12px;border-top:1px solid #eee;display:flex;gap:12px;align-items:center}
+.input{flex:1;background:#fff;border:1px solid #eee;padding:12px 14px;border-radius:28px;outline:none}
+.send{width:48px;height:48px;border-radius:50%;background:#a93b2b;border:none;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+
+/* small helper */
+.muted{color:#9aa0a6;font-size:13px;text-align:center;padding:8px}
+</style>
+</head>
+
+<body>
+<div class="frame">
+<div class="header">
+<div class="back">◀</div>
+<div>
+<div class="title">Fun Friday Group</div>
+<div style="font-size:12px;color:#666">Anonymously Chat group_With_Anonymous ON</div>
+</div>
+<div class="anon-toggle">
+<label style="display:flex;align-items:center;gap:8px"><input id="anonCheckbox" type="checkbox" checked>Appear as Anonymous</label>
+</div>
+</div>
+
+
+<div class="messages-wrap" id="messages"></div>
+
+
+<div class="muted">Now you're appearing as Anonymous!</div>
+
+
+<div class="input-area">
+<input id="sender" class="input" placeholder="Your name (optional) — shown when not anonymous" />
+<input id="messageInput" class="input" placeholder="Type a message ..." />
+<button id="sendBtn" class="send">➤</button>
+</div>
+</div>
+
+
+<script>
+const messagesEl = document.getElementById('messages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const anonCheckbox = document.getElementById('anonCheckbox');
+const senderInput = document.getElementById('sender');
+
+
+let lastId = 0;
+
+
+function formatTime(ts){
+const d = new Date(ts);
+return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+
+function renderMessage(msg){
+const wrapper = document.createElement('div');
+wrapper.className = 'message';
+
+
+const avatar = document.createElement('div');
+avatar.className = 'avatar';
+wrapper.appendChild(avatar);
+
+
+const content = document.createElement('div');
+const bubble = document.createElement('div');
+bubble.className = 'bubble';
+if (msg.is_me) bubble.classList.add('me');
+
+const fromName = document.createElement('div');
+fromName.style.fontWeight = '700';
+fromName.style.marginBottom = '4px';
+fromName.style.fontSize = '14px';
+fromName.textContent = msg.is_anonymous ? 'Anonymous' : msg.sender;
+
+
+const text = document.createElement('div');
+text.textContent = msg.content;
+text.style.fontWeight = '600';
+text.style.whiteSpace = 'pre-wrap';
+
+
+const meta = document.createElement('div');
+meta.className = 'meta';
+meta.textContent = formatTime(msg.created_at);
+
+
+bubble.appendChild(fromName);
+bubble.appendChild(text);
+bubble.appendChild(meta);
+
+
+content.appendChild(bubble);
+if (msg.is_me){
+wrapper.style.justifyContent = 'flex-end';
+avatar.style.display = 'none';
+bubble.style.marginLeft = 'auto';
+}
+
+
+wrapper.appendChild(content);
+messagesEl.appendChild(wrapper);
+}
+
+async function fetchMessages(){
+try{
+const resp = await fetch(`/api/messages?sinceId=${lastId}`);
+const data = await resp.json();
+if (data.ok && data.messages && data.messages.length){
+for (const m of data.messages){
+const meName = localStorage.getItem('meName') || '';
+const is_me = (!m.is_anonymous) && meName && meName === m.sender;
+renderMessage({ ...m, is_me });
+lastId = Math.max(lastId, m.id);
+}
+messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+}catch(e){
+console.error('fetch error', e);
+}
+}
+
+async function sendMessage(){
+const txt = messageInput.value.trim();
+if (!txt) return;
+const is_anonymous = anonCheckbox.checked;
+const sender = senderInput.value.trim();
+
+// Save as local name
+if (!is_anonymous && sender) localStorage.setItem('meName', sender);
+else if (is_anonymous) localStorage.removeItem('meName');
+
+
+const payload = { sender, content: txt, is_anonymous };
+try{
+const resp = await fetch('/api/messages', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(payload)
+});
+const data = await resp.json();
+if (data.ok && data.message){
+
+const is_me = !data.message.is_anonymous && (!is_anonymous ? (sender === data.message.sender) : false);
+renderMessage({ ...data.message, is_me });
+lastId = Math.max(lastId, data.message.id);
+messagesEl.scrollTop = messagesEl.scrollHeight;
+messageInput.value = '';
+} else {
+alert('Send failed');
+}
+}catch(err){
+console.error(err);
+alert('Network error');
+}
+}
+sendBtn.addEventListener('click', sendMessage);
+messageInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') sendMessage(); });
+
+
+// Polling every 2 seconds
+setInterval(fetchMessages, 2000);
+// initial fetch
+fetchMessages();
+</script>
+</body>
+</html>
